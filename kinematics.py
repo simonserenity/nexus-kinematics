@@ -18,28 +18,24 @@ def csvread(file):
     filelist = np.array(list(thisreader))
     return filelist
     
-def readtrajectories(filelist):
+def readtrajectories(filelist, LeftStartFrame, LeftEndFrame, LeftFoffFrame, RightStartFrame, RightEndFrame, RightFoffFrame):
     """
     Read a numpy array object in Vicon export format with marker trajectories.
+    Requires frame of initial contact, foot off, and end of swing.
     Output is a dictionary with the following parts:-
-    LeftSpeed/RightSpeed = walking speed
-    LeftFoff/RightFoff = foot off %
-    LeftFoffFrame/RightFoffFrame = frame of foot off in marked stride
-    LeftStartFrame/RightStartFrame = frame of initial footstrikes in marked stride
-    LeftEndFrame/RightEndFrame = frame of final footstrikes in marked stride
-    LeftStepLen/RightStepLen = step length in marked stride
     LeftToeZ/RightToeZ = vector of toe marker Z coord throughout trial
+    LeftStepTime/RightStepTime = time taken for marked step, in seconds
+    LeftFoffFraction/RightFoffFraction = footoff as fraction of total step time
+    LeftStepLen/RightStepLen = length of marked step length in metres
+    LeftSpeedCalc/RightSpeedCalc = walking speed calculated from these values
     """
     filelen = len(filelist) - 2
     trajstart = filelen
     output = {}
     LtoeZ = []
     RtoeZ = []
-    events = 0
     LeftToeCol = 29
     RightToeCol = 47
-    LeftStrike = []
-    RightStrike = []
     for n in range(filelen):
         try:
             # Assign gait parameters to dictionary
@@ -49,7 +45,50 @@ def readtrajectories(filelist):
                     if 'LTOE' in filelist[n][m]:
                         LeftToeCol = m
                     elif 'RTOE' in filelist[n][m]:
-                        RightToeCol = m
+                        RightToeCol = m                   
+            elif n >= trajstart:
+                LtoeZ.append(filelist[n][LeftToeCol + 2])
+                RtoeZ.append(filelist[n][RightToeCol + 2])
+        except IndexError:
+            continue
+    output['LeftToeZ'] = [(0 if n=='' else float(n)) for n in LtoeZ]
+    output['RightToeZ'] = [(0 if n=='' else float(n)) for n in RtoeZ]
+    sides = ['Left', 'Right']
+    #TODO: change all endframe/startframe/foffframe to use function inputs
+    for side in sides:
+#        try:
+            # Start & end frames are min& max because Nexus confuses them sometimes.
+            # And if it does that, it doesnt show step time/speeds
+            output[side+'StepTime'] = (output[side+'EndFrame']-output[side+'StartFrame'])/100
+            output[side+'FoffFraction'] = (output[side+'FoffFrame']-output[side+'StartFrame']) / output[side+'StepTime']
+            output[side+'StepLen'] = float(filelist[output[side+'EndFrame']][locals()[side+'ToeCol']+1]) - float(filelist[output[side+'StartFrame']][locals()[side+'ToeCol']+1])
+            output[side+'SpeedCalc'] = output[side+'StepLen'] / output[side+'StepTime']
+#        except TypeError:
+#            print('TypeError caught, suspect missing trajectory values in stride. Continuing...')
+    #import pdb; pdb.set_trace()
+    return output
+    
+def readangles(filelist):
+    """
+    Read a numpy array object in Vicon export format with model outputs.
+    Output is a dictionary with the following parts:-
+    LeftStartFrame/RightStartFrame = frame of initial footstrikes in marked stride
+    LeftEndFrame/RightEndFrame = frame of final footstrikes in marked stride
+    LeftAnkleAngle/RightAnkleAngle = list of absolute ankle angles throughout trial
+    LeftSpeed/RightSpeed = walking speed
+    LeftFoffFrame/RightFoffFrame = frame of foot off in marked stride
+    StrideLen = stride length in marked stride
+    """
+    filelen = len(filelist) - 2
+    output = {'RightAnkleAngle': [], 'LeftAnkleAngle': []}
+    anglestart = filelen
+    LeftStrike = []
+    RightStrike = []
+    events = 0
+    for n in range(filelen):
+        try:
+            if filelist[n][0] == 'Model Outputs':
+                anglestart = n + 5
             elif filelist[n][0] == 'Events':
                 events = 1
             elif filelist[n][2] == 'Walking Speed':
@@ -64,76 +103,35 @@ def readtrajectories(filelist):
                 if filelist[n][1] == 'Left':
                     LeftStrike.append(int(float(filelist[n][3]) * 100))
                 elif filelist[n][1] == 'Right':
-                    RightStrike.append(int(float(filelist[n][3]) * 100))                    
-            elif n >= trajstart:
-                LtoeZ.append(filelist[n][LeftToeCol + 2])
-                RtoeZ.append(filelist[n][RightToeCol + 2])
-        except IndexError:
-            continue
-    output['LeftToeZ'] = [(0 if n=='' else float(n)) for n in LtoeZ]
-    output['RightToeZ'] = [(0 if n=='' else float(n)) for n in RtoeZ]
-    sides = ['Left', 'Right']
-    for side in sides:
-#        try:
-            # Start & end frames are min& max because Nexus confuses them sometimes.
-            output[side+'StartFrame'] = min(locals()[side+'Strike'])
-            output[side+'EndFrame'] = max(locals()[side+'Strike'])
-            # And if it does that, it doesnt show step time/speeds
-            output[side+'StepTime'] = output[side+'EndFrame']-output[side+'StartFrame']
-            output[side+'FoffFraction'] = (output[side+'FoffFrame']-output[side+'StartFrame']) / output[side+'StepTime']
-            output[side+'StepLen'] = float(filelist[output[side+'EndFrame']][locals()[side+'ToeCol']]) - float(filelist[output[side+'StartFrame']][locals()[side+'ToeCol']])
-            output[side+'SpeedCalc'] = output[side+'StepLen'] / output[side+'StepTime']
-#        except TypeError:
-#            print('TypeError caught, suspect missing trajectory values in stride. Continuing...')
-    #import pdb; pdb.set_trace()
-    return output
-    
-def readangles(filelist):
-    """
-    Read a numpy array object in Vicon export format with model outputs.
-    Output is a dictionary with the following parts:-
-    LeftStartFrame/RightStartFrame = frame of initial footstrikes in marked stride
-    LeftEndFrame/RightEndFrame = frame of final footstrikes in marked stride
-    LeftAnkleAngle/RightAnkleAngle = list of absolute ankle angles throughout trial
-    """
-    filelen = len(filelist) - 2
-    output = {}
-    anglestart = filelen
-    Rankle = []
-    Lankle = []
-    for n in range(filelen):
-        try:
-            if filelist[n][0] == 'Model Outputs':
-                anglestart = n + 5
-            elif filelist[n][2] == 'Foot Strike':
-                if filelist[n][1]+'StartFrame' not in output:
-                    output[filelist[n][1]+'StartFrame'] = int(float(filelist[n][3]) * 100)
-                else:
-                    output[filelist[n][1]+'EndFrame'] = int(float(filelist[n][3]) * 100)
+                    RightStrike.append(int(float(filelist[n][3]) * 100)) 
             elif n >= anglestart:
                 # List ankle abs angles, convert to float if possible
                 try:
-                    Lankle.append(float(filelist[n][2]))
+                    output['LeftAnkleAngle'].append(float(filelist[n][2]))
                 except ValueError:
-                    Lankle.append(filelist[n][2])
+                    output['LeftAnkleAngle'].append(filelist[n][2])
                 try:
-                    Rankle.append(float(filelist[n][101]))
+                    output['RightAnkleAngle'].append(float(filelist[n][101]))
                 except ValueError:
-                    Rankle.append(filelist[n][101])
+                    output['RightAnkleAngle'].append(filelist[n][101])
         except IndexError:
             continue
     #import pdb; pdb.set_trace()
-    output['LeftAnkleAngle'] = Lankle
-    output['RightAnkleAngle'] = Rankle
+    sides = ['Left', 'Right']
+    for side in sides:
+        output[side+'StartFrame'] = min(locals()[side+'Strike'])
+        output[side+'EndFrame'] = max(locals()[side+'Strike'])
     return output
 
 def onetrial(trialnum):
     """
     Read in files for a single trial, extract useful information.
     """
+    #TODO: check trials for an Events section, output something obviously blank if not there.
     anglelist = csvread("Angles/%s.csv" % (trialnum, ))
     angles = readangles(anglelist)
     trajlist = csvread("Trajectories/%s.csv" % (trialnum, ))
+    #TODO: add extra inputs to readtrajectories
     trajectories = readtrajectories(trajlist)
     #import pdb; pdb.set_trace()
     try:
