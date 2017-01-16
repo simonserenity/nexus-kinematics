@@ -35,34 +35,56 @@ def readtrajectories(filelist):
     output = {}
     LtoeZ = []
     RtoeZ = []
+    events = 0
+    LeftToeCol = 29
+    RightToeCol = 47
+    LeftStrike = []
+    RightStrike = []
     for n in range(filelen):
         try:
             # Assign gait parameters to dictionary
             if filelist[n][0] == 'Trajectories':
                 trajstart = n + 5
+                for m in range(len(filelist[trajstart-3])):
+                    if 'LTOE' in filelist[n][m]:
+                        LeftToeCol = m
+                    elif 'RTOE' in filelist[n][m]:
+                        RightToeCol = m
+            elif filelist[n][0] == 'Events':
+                events = 1
             elif filelist[n][2] == 'Walking Speed':
                 output[filelist[n][1]+'Speed'] = float(filelist[n][3])
-            elif filelist[n][2] == 'Foot Off':
-                if filelist[n][1]+'Foff' not in output:
-                    output[filelist[n][1]+'Foff'] = float(filelist[n][3])
-                elif filelist[n][1]+'FoffFrame' not in output:
-                    output[filelist[n][1]+'FoffFrame'] = int(float(filelist[n][3]) * 100)
-            elif filelist[n][2] == 'Step Length':
-                output[filelist[n][1]+'StepLen'] = float(filelist[n][3])
-            elif filelist[n][2] == 'Foot Strike':
-                # First instance of foot strike is StartFrame. 
+            elif filelist[n][2] == 'Foot Off' and events == 1:
+                # Footoff frame in events
+                output[filelist[n][1]+'FoffFrame'] = int(float(filelist[n][3]) * 100)
+            elif filelist[n][2] == 'Stride Length':
+                output[filelist[n][1]+'StrideLen'] = float(filelist[n][3])
+            elif filelist[n][2] == 'Foot Strike': 
                 # Convert seconds to frames at 100Hz.
-                if filelist[n][1]+'StartFrame' not in output:
-                    output[filelist[n][1]+'StartFrame'] = int(float(filelist[n][3]) * 100)
-                else:
-                    output[filelist[n][1]+'EndFrame'] = int(float(filelist[n][3]) * 100)
+                if filelist[n][1] == 'Left':
+                    LeftStrike.append(int(float(filelist[n][3]) * 100))
+                elif filelist[n][1] == 'Right':
+                    RightStrike.append(int(float(filelist[n][3]) * 100))                    
             elif n >= trajstart:
-                LtoeZ.append(filelist[n][31])
-                RtoeZ.append(filelist[n][49])
+                LtoeZ.append(filelist[n][LeftToeCol + 2])
+                RtoeZ.append(filelist[n][RightToeCol + 2])
         except IndexError:
             continue
-    output['LeftToeZ'] = [('0' if n=='' else float(n)) for n in LtoeZ]
-    output['RightToeZ'] = [('0' if n=='' else float(n)) for n in RtoeZ]
+    output['LeftToeZ'] = [(0 if n=='' else float(n)) for n in LtoeZ]
+    output['RightToeZ'] = [(0 if n=='' else float(n)) for n in RtoeZ]
+    sides = ['Left', 'Right']
+    for side in sides:
+#        try:
+            # Start & end frames are min& max because Nexus confuses them sometimes.
+            output[side+'StartFrame'] = min(locals()[side+'Strike'])
+            output[side+'EndFrame'] = max(locals()[side+'Strike'])
+            # And if it does that, it doesnt show step time/speeds
+            output[side+'StepTime'] = output[side+'EndFrame']-output[side+'StartFrame']
+            output[side+'FoffFraction'] = (output[side+'FoffFrame']-output[side+'StartFrame']) / output[side+'StepTime']
+            output[side+'StepLen'] = float(filelist[output[side+'EndFrame']][locals()[side+'ToeCol']]) - float(filelist[output[side+'StartFrame']][locals()[side+'ToeCol']])
+            output[side+'SpeedCalc'] = output[side+'StepLen'] / output[side+'StepTime']
+#        except TypeError:
+#            print('TypeError caught, suspect missing trajectory values in stride. Continuing...')
     #import pdb; pdb.set_trace()
     return output
     
@@ -165,7 +187,7 @@ def arraycleaner(array):
     return array
     
 if __name__ == '__main__':
-    trials = ['OWN','FACTORY','R0','R50','R100','R150','R200','R300','X0','X50','X100','X150','X200','X300','D0','D50','D100','D150']
+    trials = ['OWN','FACTORY','R0','R50','R100','R150','R300','X0','X50','X100','X150','X300','D50','D100','D150']
     #TEST CASE (comment out the above line, uncomment line below this)
     #trials = ['OWN']
     subject = {}
