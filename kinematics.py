@@ -60,7 +60,7 @@ def readtrajectories(filelist, frames):
             # And if it does that, it doesnt show step time/speeds
             output[side+'StepTime'] = (frames[side+'End']-frames[side+'Start'])/100
             output[side+'FoffFraction'] = (frames[side+'Foff']-frames[side+'Start']) / output[side+'StepTime']
-            output[side+'StepLen'] = float(filelist[frames[side+'End']][locals()[side+'ToeCol']+1]) - float(filelist[frames[side+'Start']][locals()[side+'ToeCol']+1])
+            output[side+'StepLen'] = float(filelist[frames[side+'End']+trajstart][locals()[side+'ToeCol']+1]) - float(filelist[frames[side+'Start']+trajstart][locals()[side+'ToeCol']+1])
             output[side+'SpeedCalc'] = output[side+'StepLen'] / output[side+'StepTime']
 #        except TypeError:
 #            print('TypeError caught, suspect missing trajectory values in stride. Continuing...')
@@ -139,7 +139,7 @@ def onetrial(trialnum):
     trajlist = csvread("Trajectories/%s.csv" % (trialnum, ))
     trajectories = readtrajectories(trajlist, angles['Frames'])
     output = {**trajectories, **angles}
-    import pdb; pdb.set_trace()
+    #import pdb; pdb.set_trace()
     return output
 
 def minclearance(ToeZ, StartFrame, FootOff, EndFrame, MidSwingStart, MidSwingEnd):
@@ -188,9 +188,12 @@ if __name__ == '__main__':
     print("Please enter the participant ID, e.g. 1")
     participant = input()
     for trial in trials:
-        print("""Please enter the trial number for %s""" % (trial, ))
+        print("""Please enter the trial number for %s. If none, leave blank.""" % (trial, ))
         trialnum = input()
-        subject[trial] = onetrial(trialnum)
+        if trialnum == '':
+            subject[trial] = {}
+        else:
+            subject[trial] = onetrial(trialnum)
     afile = open(r'Subject%s.pkl' % (participant, ), 'wb')
     pickle.dump(subject, afile)
     afile.close()
