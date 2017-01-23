@@ -18,10 +18,14 @@ def csvread(file):
     filelist = np.array(list(thisreader))
     return filelist
     
+#def tableread(filelist, start, frames):
+    
+    
 def readtrajectories(filelist, frames):
     """
     Read a numpy array object in Vicon export format with marker trajectories.
     Requires frame dictionary with initial contact, foot off, and end of swing.
+    Values that cannot be calculated from inputs will output 'NA'.
     Output is a dictionary with the following parts:-
     LeftToeZ/RightToeZ = vector of toe marker Z coord throughout trial
     LeftStepTime/RightStepTime = time taken for marked step, in seconds
@@ -36,23 +40,31 @@ def readtrajectories(filelist, frames):
     RtoeZ = []
     LeftToeCol = 29
     RightToeCol = 47
-    for n in range(filelen):
+    for row in range(filelen):
         try:
             # Assign gait parameters to dictionary
-            if filelist[n][0] == 'Trajectories':
-                trajstart = n + 5
-                for m in range(len(filelist[trajstart-3])):
-                    if 'LTOE' in filelist[n][m]:
-                        LeftToeCol = m
-                    elif 'RTOE' in filelist[n][m]:
-                        RightToeCol = m                   
-            elif n >= trajstart:
-                LtoeZ.append(filelist[n][LeftToeCol + 2])
-                RtoeZ.append(filelist[n][RightToeCol + 2])
+            if filelist[row][0] == 'Trajectories':
+                trajstart = row + 5
+                filewidth = len(filelist[row+3])-1
         except IndexError:
             continue
-    output['LeftToeZ'] = [(0 if n=='' else float(n)) for n in LtoeZ]
-    output['RightToeZ'] = [(0 if n=='' else float(n)) for n in RtoeZ]
+    for col in range(2,filewidth):
+        # Name the trajectory in each column
+        if filelist[trajstart-3][col]:
+            tmp = filelist[trajstart-3][col]+filelist[trajstart-2][col]
+        elif filelist[trajstart-3][col-1]:
+            tmp = filelist[trajstart-3][col-1]+filelist[trajstart-2][col]
+        elif filelist[trajstart-3][col-2]:
+            tmp = filelist[trajstart-3][col-2]+filelist[trajstart-2][col]
+        name = tmp[tmp.rfind(":")+1:]
+        output[name] = []
+        side = ('Right') if name[0]=='R' else ('Left')
+        # Make a list of values within the marked stride frames
+        for row in range(trajstart+frames[side+'Start'], trajstart+frames[side+'End']):
+            if filelist[row][col] == '':
+                output[name].append('NA')
+            else:
+                output[name].append(float(filelist[row][col]))
     sides = ['Left', 'Right']
     for side in sides:
 #        try:
@@ -60,7 +72,10 @@ def readtrajectories(filelist, frames):
             # And if it does that, it doesnt show step time/speeds
             output[side+'StepTime'] = (frames[side+'End']-frames[side+'Start'])/100
             output[side+'FoffFraction'] = (frames[side+'Foff']-frames[side+'Start']) / output[side+'StepTime']
-            output[side+'StepLen'] = float(filelist[frames[side+'End']+trajstart][locals()[side+'ToeCol']+1]) - float(filelist[frames[side+'Start']+trajstart][locals()[side+'ToeCol']+1])
+            try:
+                output[side+'StepLen'] = float(filelist[frames[side+'End']+trajstart][locals()[side+'ToeCol']+1]) - float(filelist[frames[side+'Start']+trajstart][locals()[side+'ToeCol']+1])
+            except ValueError:
+                output[side+'StepLen'] = 'NA'
             output[side+'SpeedCalc'] = output[side+'StepLen'] / output[side+'StepTime']
 #        except TypeError:
 #            print('TypeError caught, suspect missing trajectory values in stride. Continuing...')
@@ -88,6 +103,7 @@ def readangles(filelist):
         try:
             if filelist[n][0] == 'Model Outputs':
                 anglestart = n + 5
+                filewidth = len(filelist[n+3])-1
             elif filelist[n][0] == 'Events':
                 events = 1
             elif filelist[n][2] == 'Walking Speed':
@@ -120,11 +136,15 @@ def readangles(filelist):
         output['Frames'].update({side+'Start' : min(locals()[side+'Strike'])})
         output['Frames'].update({side+'End' : max(locals()[side+'Strike'])})
     #import pdb; pdb.set_trace()
+    if anglestart == filelen:
+        raise NameError('No angles in angle file!')
     return output
 
 def onetrial(trialnum):
     """
-    Read in files for a single trial, extract useful information.
+    Read in files for a single trial, extract useful information. 
+    Data must be in CSV files in subdirectories Angles and Trajectories.
+    Gives an empty dictionary if no stride data present in angles file.
     """
     eventsexist = False
     anglelist = csvread("Angles/%s.csv" % (trialnum, ))
@@ -187,6 +207,10 @@ if __name__ == '__main__':
     subject = {}
     print("Please enter the participant ID, e.g. 1")
     participant = input()
+    print("Please enter the affected side, e.g. Left. If both, enter Bilateral.")
+    affectedside = input().capitalize()
+    if affectedside not in ('Left', 'Right', 'Bilateral'):
+        raise ValueError("GOD DAMNIT ENTER LEFT OR RIGHT OR BILATERAL. WHAT THE HELL.")
     for trial in trials:
         print("""Please enter the trial number for %s. If none, leave blank.""" % (trial, ))
         trialnum = input()
@@ -194,6 +218,7 @@ if __name__ == '__main__':
             subject[trial] = {}
         else:
             subject[trial] = onetrial(trialnum)
+            subject[trial]['AffectedSide'] = affectedside
     afile = open(r'Subject%s.pkl' % (participant, ), 'wb')
     pickle.dump(subject, afile)
     afile.close()
