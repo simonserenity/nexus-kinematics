@@ -18,7 +18,39 @@ def csvread(file):
     filelist = np.array(list(thisreader))
     return filelist
     
-#def tableread(filelist, start, frames):
+def tableread(filelist, start, frames, onlyinclude=''):
+    """
+    Read a list of lists, from a Nexus CSV export, to extract vector data.
+    Output is a dictionary of lists.
+    Inputs:-
+    filelist = the data
+    start = the row number where data to be read starts
+    frames = dict of Start and End frames for strides
+    onlyinclude = optional argument, only columns where title includes this will be included
+    """
+    filewidth = len(filelist[start-2])-1
+    output = {}
+    startframe = start - int(filelist[start][0]) + 1
+    for col in range(2,filewidth):
+        # Name the datatype in each column
+        if filelist[start-3][col]:
+            tmp = filelist[start-3][col]+filelist[start-2][col]
+        elif filelist[start-3][col-1]:
+            tmp = filelist[start-3][col-1]+filelist[start-2][col]
+        elif filelist[start-3][col-2]:
+            tmp = filelist[start-3][col-2]+filelist[start-2][col]
+        name = tmp[tmp.rfind(":")+1:]
+        if onlyinclude in name or not onlyinclude:
+            output[name] = []
+            side = ('Right') if name[0]=='R' else ('Left')
+            # Make a list of values within the marked stride frames
+            for row in range(startframe+frames[side+'Start'], startframe+frames[side+'End']):
+                if filelist[row][col] == '':
+                    output[name].append('NA')
+                else:
+                    output[name].append(float(filelist[row][col]))
+    #import pdb; pdb.set_trace()
+    return output
     
     
 def readtrajectories(filelist, frames):
@@ -45,26 +77,9 @@ def readtrajectories(filelist, frames):
             # Assign gait parameters to dictionary
             if filelist[row][0] == 'Trajectories':
                 trajstart = row + 5
-                filewidth = len(filelist[row+3])-1
         except IndexError:
             continue
-    for col in range(2,filewidth):
-        # Name the trajectory in each column
-        if filelist[trajstart-3][col]:
-            tmp = filelist[trajstart-3][col]+filelist[trajstart-2][col]
-        elif filelist[trajstart-3][col-1]:
-            tmp = filelist[trajstart-3][col-1]+filelist[trajstart-2][col]
-        elif filelist[trajstart-3][col-2]:
-            tmp = filelist[trajstart-3][col-2]+filelist[trajstart-2][col]
-        name = tmp[tmp.rfind(":")+1:]
-        output[name] = []
-        side = ('Right') if name[0]=='R' else ('Left')
-        # Make a list of values within the marked stride frames
-        for row in range(trajstart+frames[side+'Start'], trajstart+frames[side+'End']):
-            if filelist[row][col] == '':
-                output[name].append('NA')
-            else:
-                output[name].append(float(filelist[row][col]))
+    output.update(tableread(filelist,trajstart,frames))
     sides = ['Left', 'Right']
     for side in sides:
 #        try:
@@ -72,6 +87,7 @@ def readtrajectories(filelist, frames):
             # And if it does that, it doesnt show step time/speeds
             output[side+'StepTime'] = (frames[side+'End']-frames[side+'Start'])/100
             output[side+'FoffFraction'] = (frames[side+'Foff']-frames[side+'Start']) / output[side+'StepTime']
+            #TODO: StepLen is outputting insane negative numbers. Fix this shit.
             try:
                 output[side+'StepLen'] = float(filelist[frames[side+'End']+trajstart][locals()[side+'ToeCol']+1]) - float(filelist[frames[side+'Start']+trajstart][locals()[side+'ToeCol']+1])
             except ValueError:
@@ -79,7 +95,7 @@ def readtrajectories(filelist, frames):
             output[side+'SpeedCalc'] = output[side+'StepLen'] / output[side+'StepTime']
 #        except TypeError:
 #            print('TypeError caught, suspect missing trajectory values in stride. Continuing...')
-    #import pdb; pdb.set_trace()
+#    import pdb; pdb.set_trace()
     return output
     
 def readangles(filelist):
@@ -103,7 +119,6 @@ def readangles(filelist):
         try:
             if filelist[n][0] == 'Model Outputs':
                 anglestart = n + 5
-                filewidth = len(filelist[n+3])-1
             elif filelist[n][0] == 'Events':
                 events = 1
             elif filelist[n][2] == 'Walking Speed':
@@ -138,6 +153,7 @@ def readangles(filelist):
     #import pdb; pdb.set_trace()
     if anglestart == filelen:
         raise NameError('No angles in angle file!')
+    output.update(tableread(filelist,anglestart,output['Frames'],'Angle'))
     return output
 
 def onetrial(trialnum):
