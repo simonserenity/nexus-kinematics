@@ -82,20 +82,14 @@ def readtrajectories(filelist, frames):
     output.update(tableread(filelist,trajstart,frames))
     sides = ['Left', 'Right']
     for side in sides:
-#        try:
-            # Start & end frames are min& max because Nexus confuses them sometimes.
-            # And if it does that, it doesnt show step time/speeds
             output[side+'StepTime'] = (frames[side+'End']-frames[side+'Start'])/100
             output[side+'FoffFraction'] = (frames[side+'Foff']-frames[side+'Start']) / output[side+'StepTime']
-            #TODO: StepLen is outputting insane negative numbers. Fix this shit.
             try:
-                output[side+'StepLen'] = float(filelist[frames[side+'End']+trajstart][locals()[side+'ToeCol']+1]) - float(filelist[frames[side+'Start']+trajstart][locals()[side+'ToeCol']+1])
+                output[side+'StepLen'] = abs(float(filelist[frames[side+'End']+trajstart][locals()[side+'ToeCol']+1]) - float(filelist[frames[side+'Start']+trajstart][locals()[side+'ToeCol']+1]))/1000
             except ValueError:
                 output[side+'StepLen'] = 'NA'
             output[side+'SpeedCalc'] = output[side+'StepLen'] / output[side+'StepTime']
-#        except TypeError:
-#            print('TypeError caught, suspect missing trajectory values in stride. Continuing...')
-#    import pdb; pdb.set_trace()
+    import pdb; pdb.set_trace()
     return output
     
 def readangles(filelist):
@@ -175,6 +169,7 @@ def onetrial(trialnum):
     trajlist = csvread("Trajectories/%s.csv" % (trialnum, ))
     trajectories = readtrajectories(trajlist, angles['Frames'])
     output = {**trajectories, **angles}
+    output['TrialUsed'] = trialnum
     #import pdb; pdb.set_trace()
     return output
 
