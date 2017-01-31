@@ -89,7 +89,7 @@ def readtrajectories(filelist, frames):
             except ValueError:
                 output[side+'StepLen'] = 'NA'
             output[side+'SpeedCalc'] = output[side+'StepLen'] / output[side+'StepTime']
-    import pdb; pdb.set_trace()
+    #import pdb; pdb.set_trace()
     return output
     
 def readangles(filelist):
@@ -141,13 +141,16 @@ def readangles(filelist):
         except IndexError:
             continue
     sides = ['Left', 'Right']
+    output.update(tableread(filelist,anglestart,output['Frames'],'Angle'))
     for side in sides:
         output['Frames'].update({side+'Start' : min(locals()[side+'Strike'])})
         output['Frames'].update({side+'End' : max(locals()[side+'Strike'])})
+        mintoe = min(output[side+'AnkleAnglesX'])
+        midswingframe = int(output['Frames'][side+'Foff'] + ((output['Frames'][side+'End']-output['Frames'][side+'Foff'])/2))
+        output[side+'Clearance'] = output[side+'AnkleAnglesX'][midswingframe] - mintoe
     #import pdb; pdb.set_trace()
     if anglestart == filelen:
         raise NameError('No angles in angle file!')
-    output.update(tableread(filelist,anglestart,output['Frames'],'Angle'))
     return output
 
 def onetrial(trialnum):
