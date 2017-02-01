@@ -141,16 +141,17 @@ def readangles(filelist):
         except IndexError:
             continue
     sides = ['Left', 'Right']
-    output.update(tableread(filelist,anglestart,output['Frames'],'Angle'))
     for side in sides:
         output['Frames'].update({side+'Start' : min(locals()[side+'Strike'])})
         output['Frames'].update({side+'End' : max(locals()[side+'Strike'])})
-        mintoe = min(output[side+'AnkleAnglesX'])
-        midswingframe = int(output['Frames'][side+'Foff'] + ((output['Frames'][side+'End']-output['Frames'][side+'Foff'])/2))
-        output[side+'Clearance'] = output[side+'AnkleAnglesX'][midswingframe] - mintoe
-    #import pdb; pdb.set_trace()
+    output.update(tableread(filelist,anglestart,output['Frames'],'Angle'))
     if anglestart == filelen:
         raise NameError('No angles in angle file!')
+    for side in sides:
+        mintoe = min(output[side[0]+'AnkleAnglesX'])
+        midswingframe = int(output['Frames'][side+'Foff']/2 + output['Frames'][side+'End']/2 - output['Frames'][side+'Start'])
+        output[side+'Clearance'] = output[side[0]+'AnkleAnglesX'][midswingframe] - mintoe
+    #import pdb; pdb.set_trace()
     return output
 
 def onetrial(trialnum):
@@ -213,7 +214,7 @@ def arraycleaner(array):
                     continue
             array[n] = line[0:shortest]
     return array
-    
+ 
 if __name__ == '__main__':
     trials = ['OWN','FACTORY','R0','R50','R100','R150','R300','X0','X50','X100','X150','X300','D50','D100','D150']
     #TEST CASE (comment out the above line, uncomment line below this)
